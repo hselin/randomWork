@@ -12,6 +12,7 @@
 #include <string.h>
 #include <malloc.h>
 #include <assert.h>
+#include <openssl/sha.h>
 
 #define KB                  (1024)
 #define MB                  (1024 * KB)
@@ -30,7 +31,10 @@ struct threadRecord
 struct threadIoCntx
 {
     struct threadRecord tr;
-    uint64_t timeDuration;
+    uint64_t numDigest;
+    unsigned char digest[SHA256_DIGEST_LENGTH];
+    char *buffer;
+    uint64_t bufferSize;
 };
 
 uint64_t getElapsedTimeUS(struct timespec *start, struct timespec *end)
@@ -43,29 +47,38 @@ static inline uint64_t randomNumber(uint64_t min, uint64_t max)
     return (rand() % (max + 1 - min) + min);
 }
 
+
+void sha256(char *buf, uint64_t bufLen, unsigned char *hash)
+{
+    SHA256_CTX ctx;
+    SHA256_Init(&ctx);
+    SHA256_Update(&ctx, buf, bufLen);
+    SHA256_Final(hash, &ctx);
+
+    /*
+    char outputBuffer[65];
+    int i = 0;
+    for(i = 0; i < SHA256_DIGEST_LENGTH; i++)
+    {
+        sprintf(outputBuffer + (i * 2), "%02x", hash[i]);
+    }
+    outputBuffer[64] = 0;
+
+    printf("%s\n", outputBuffer);
+    */
+}
+
 void *execFunc(void *arg)
 {
-    struct timespec t1, t2;
     struct threadIoCntx *cntx = (struct threadIoCntx *)arg;
 
-    srand(time(NULL));
-    
-    clock_gettime(CLOCK_MONOTONIC_RAW, &t1);
-
-    while(1)
+    while(cntx->numDigest)
     {
-        clock_gettime(CLOCK_MONOTONIC_RAW, &t2);
-        cntx->tr.elapsedTime = getElapsedTimeUS(&t1, &t2);
+        for(size_t i = 0; i < cntx->bufferSize; i++)
+            cntx->buffer[i] = rand() % 256;
 
-        if(US_TO_MS(cntx->tr.elapsedTime) >= cntx->timeDuration)
-        {
-            break;
-        }
-        else
-        {
-            //work work
-            usleep(1);
-        }
+        sha256((char *)cntx->buffer, cntx->bufferSize, cntx->digest);
+        cntx->numDigest--;
     }
 
     return NULL;
@@ -73,20 +86,25 @@ void *execFunc(void *arg)
 
 int main(int argc, char *argv[])
 {
-    if(argc != 3)
+    if(argc != 4)
     {
-        printf("Usage: ./randWork <num threads> <time duration>\n");
+        printf("Usage: ./randWork <num threads> <buffer size> <num digests>\n");
         exit(0);
     }
 
     char *numThreadStr = argv[1];
-    char *timeDurationStr = argv[2];
+    char *bufferSizeStr = argv[2];
+    char *numDigestStr = argv[3];
 
     printf("numThread: %s | %d\n", numThreadStr, atoi(numThreadStr));
-    printf("timeDuration: %s | %lu\n", timeDurationStr, strtoul(timeDurationStr, NULL, 0));
+    printf("bufferSizeStr: %s | %lu\n", bufferSizeStr, strtoul(bufferSizeStr, NULL, 0));
+    printf("numDigestStr: %s | %lu\n", numDigestStr, strtoul(numDigestStr, NULL, 0));
 
     int numThread = atoi(numThreadStr);
-    uint64_t timeDuration = strtoul(timeDurationStr, NULL, 0);
+    uint64_t bufferSize = strtoul(bufferSizeStr, NULL, 0);
+    uint64_t numDigest = strtoul(numDigestStr, NULL, 0);
+
+    srand(time(NULL));
 
     pthread_t threadIDs[numThread];
     struct threadIoCntx threadIOContexts[numThread];
@@ -94,7 +112,10 @@ int main(int argc, char *argv[])
     for(int i = 0; i < numThread; i++)
     {
         threadIOContexts[i].tr = {0};
-        threadIOContexts[i].timeDuration = timeDuration;
+        threadIOContexts[i].numDigest = numDigest;
+        threadIOContexts[i].buffer = (char *)malloc(bufferSize);
+        assert(threadIOContexts[i].buffer);
+        threadIOContexts[i].bufferSize = bufferSize;
         pthread_create(&threadIDs[i], NULL, execFunc, (void *)&threadIOContexts[i]);
     }
 

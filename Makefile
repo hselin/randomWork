@@ -1,5 +1,5 @@
 TARGET = randWork
-LIBS = -lm -pthread
+LIBS = -lm -pthread -lssl -lcrypto
 CC = g++
 CFLAGS = -g -Wall -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -std=c++11
 
