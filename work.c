@@ -35,6 +35,7 @@ struct threadIoCntx
     unsigned char digest[SHA256_DIGEST_LENGTH];
     char *buffer;
     uint64_t bufferSize;
+    int affinity;
 };
 
 uint64_t getElapsedTimeUS(struct timespec *start, struct timespec *end)
@@ -47,8 +48,32 @@ static inline uint64_t randomNumber(uint64_t min, uint64_t max)
     return (rand() % (max + 1 - min) + min);
 }
 
+static int getCoreCount()
+{
+    int numCores = sysconf(_SC_NPROCESSORS_ONLN);
+    assert(numCores > 0);
 
-void sha256(char *buf, uint64_t bufLen, unsigned char *hash)
+    return numCores;
+}
+
+static void setAffinity(int coreID)
+{
+    if (coreID < 0 || coreID >= getCoreCount())
+        coreID = 0;
+
+    cpu_set_t cpu_set;
+    CPU_ZERO(&cpu_set);
+    CPU_SET(coreID, &cpu_set);
+
+    //pthread_t current_thread = pthread_self();
+
+    //0 is the current thread/process
+    int ret = sched_setaffinity(0, sizeof(cpu_set_t), &cpu_set);
+
+    assert(!ret);
+}
+
+static void sha256(char *buf, uint64_t bufLen, unsigned char *hash)
 {
     SHA256_CTX ctx;
     SHA256_Init(&ctx);
@@ -71,6 +96,10 @@ void sha256(char *buf, uint64_t bufLen, unsigned char *hash)
 void *execFunc(void *arg)
 {
     struct threadIoCntx *cntx = (struct threadIoCntx *)arg;
+
+    setAffinity(cntx->affinity);
+
+    printf("affinity: %d\n", cntx->affinity);
 
     while(cntx->numDigest)
     {
@@ -103,6 +132,10 @@ int main(int argc, char *argv[])
     int numThread = atoi(numThreadStr);
     uint64_t bufferSize = strtoul(bufferSizeStr, NULL, 0);
     uint64_t numDigest = strtoul(numDigestStr, NULL, 0);
+    int coreCount = getCoreCount();
+    int affinity = 0;
+
+    printf("coreCount: %d\n", coreCount);
 
     srand(time(NULL));
 
@@ -116,6 +149,8 @@ int main(int argc, char *argv[])
         threadIOContexts[i].buffer = (char *)malloc(bufferSize);
         assert(threadIOContexts[i].buffer);
         threadIOContexts[i].bufferSize = bufferSize;
+        threadIOContexts[i].affinity = affinity;
+        affinity = (affinity + 1) % coreCount;
         pthread_create(&threadIDs[i], NULL, execFunc, (void *)&threadIOContexts[i]);
     }
 
