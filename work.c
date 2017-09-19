@@ -36,6 +36,7 @@ struct threadIoCntx
     char *buffer;
     uint64_t bufferSize;
     int affinity;
+    int useAffinity;
 };
 
 uint64_t getElapsedTimeUS(struct timespec *start, struct timespec *end)
@@ -97,9 +98,11 @@ void *execFunc(void *arg)
 {
     struct threadIoCntx *cntx = (struct threadIoCntx *)arg;
 
-    setAffinity(cntx->affinity);
-
-    //printf("affinity: %d\n", cntx->affinity);
+    if(cntx->useAffinity)
+    {
+        setAffinity(cntx->affinity);
+        printf("affinity: %d\n", cntx->affinity);
+    }
 
     while(cntx->numDigest)
     {
@@ -115,23 +118,26 @@ void *execFunc(void *arg)
 
 int main(int argc, char *argv[])
 {
-    if(argc != 4)
+    if(argc != 5)
     {
-        printf("Usage: ./randWork <num threads> <buffer size> <num digests>\n");
+        printf("Usage: ./randWork <num threads> <buffer size> <num digests> <use affinity>\n");
         exit(0);
     }
 
     char *numThreadStr = argv[1];
     char *bufferSizeStr = argv[2];
     char *numDigestStr = argv[3];
+    char *useAffinityStr = argv[4];
 
     printf("numThread: %s | %d\n", numThreadStr, atoi(numThreadStr));
     printf("bufferSizeStr: %s | %lu\n", bufferSizeStr, strtoul(bufferSizeStr, NULL, 0));
     printf("numDigestStr: %s | %lu\n", numDigestStr, strtoul(numDigestStr, NULL, 0));
+    printf("useAffinityStr: %s | %d\n", useAffinityStr, atoi(useAffinityStr));
 
     int numThread = atoi(numThreadStr);
     uint64_t bufferSize = strtoul(bufferSizeStr, NULL, 0);
     uint64_t numDigest = strtoul(numDigestStr, NULL, 0);
+    int useAffinity = atoi(useAffinityStr);
     int coreCount = getCoreCount();
     int affinity = 0;
 
@@ -151,6 +157,7 @@ int main(int argc, char *argv[])
         threadIOContexts[i].bufferSize = bufferSize;
         threadIOContexts[i].affinity = affinity;
         affinity = (affinity + 1) % coreCount;
+        threadIOContexts[i].useAffinity = useAffinity;
         pthread_create(&threadIDs[i], NULL, execFunc, (void *)&threadIOContexts[i]);
     }
 
