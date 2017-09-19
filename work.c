@@ -99,7 +99,7 @@ void *execFunc(void *arg)
 
     setAffinity(cntx->affinity);
 
-    printf("affinity: %d\n", cntx->affinity);
+    //printf("affinity: %d\n", cntx->affinity);
 
     while(cntx->numDigest)
     {
